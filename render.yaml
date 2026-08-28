@@ -11,9 +11,6 @@ services:
       - key: PORT
         sync: false
       - key: FEDIMAIL_BASE
-        # CHANGE THIS after deploy to your public URL, e.g. https://drxmail-node.onrender.com
         sync: false
-        value: https://drxmail-node.onrender.com
       - key: FEDIMAIL_DIR
         sync: false
-        value: /tmp/fedimail
