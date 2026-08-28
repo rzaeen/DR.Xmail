@@ -1,0 +1,18 @@
+# DR.Xmail — Render deployment config (free tier)
+# Deploy: push this repo to GitHub, then "New > Web Service" on render.com
+# and connect the repo. Render auto-detects this file.
+
+services:
+  - type: web
+    name: drxmail-agents
+    runtime: python
+    plan: free
+    region: frankfurt
+    branch: main
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn drxmail.api.backend:app --host 0.0.0.0 --port $PORT
+    envVars:
+      - key: PYTHON_VERSION
+        value: "3.11"
+      - key: PORT
+        value: "10000"

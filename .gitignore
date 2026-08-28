@@ -1,0 +1,19 @@
+# .gitignore — DR.Xmail
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+venv/
+env/
+*.egg-info/
+.pytest_cache/
+.DS_Store
+
+# local agent data (private identities + inbox) — DO NOT commit
+agents_mail/
+sessions/
+logs/
+
+# secrets
+credentials.json
+*.example.json
