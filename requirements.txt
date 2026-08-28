@@ -1,8 +1,8 @@
-# DR.Xmail requirements
-streamlit>=1.30.0
-playwright>=1.40.0
+# DR.Xmail — runtime deps
+# minimal: only cryptography is required for HTTP Signatures / Fediverse delivery
+cryptography>=42.0.0
 requests>=2.31.0
-# backend / deployment
-fastapi>=0.110.0
-uvicorn>=0.29.0
-pydantic>=2.6.0
+# optional UI / API:
+# streamlit>=1.30.0
+# fastapi>=0.110.0
+# uvicorn>=0.27.0

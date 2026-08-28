@@ -76,16 +76,33 @@ def parse_note(activity: Dict[str, Any]) -> Optional[Dict[str, Any]]:
     }
 
 
-def actor_doc(actor_id: str, inbox_url: str, username: str) -> Dict[str, Any]:
+def actor_doc(actor_id: str, inbox_url: str, username: str,
+              public_key_pem: str = "") -> Dict[str, Any]:
     """Standard ActivityPub actor description (served at /agents/<id>)."""
-    return {
-        "@context": "https://www.w3.org/ns/activitystreams",
+    doc = {
+        "@context": [
+            "https://www.w3.org/ns/activitystreams",
+            {"publicKey": {
+                "id": "#main-key",
+                "type": "Key",
+                "owner": actor_id,
+                "publicKeyPem": public_key_pem,
+            }},
+        ],
         "id": actor_id,
         "type": "Person",
         "preferredUsername": username,
         "inbox": inbox_url,
         "outbox": inbox_url.replace("/inbox", "/outbox"),
     }
+    if public_key_pem:
+        doc["publicKey"] = {
+            "id": f"{actor_id}#main-key",
+            "type": "Key",
+            "owner": actor_id,
+            "publicKeyPem": public_key_pem,
+        }
+    return doc
 
 
 def fingerprint(actor_id: str) -> str:

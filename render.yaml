@@ -1,18 +1,19 @@
-# DR.Xmail — Render deployment config (free tier)
-# Deploy: push this repo to GitHub, then "New > Web Service" on render.com
-# and connect the repo. Render auto-detects this file.
-
+# Render.com free deployment for DR.Xmail federated node
+# Deploy: https://dashboard.render.com -> New -> Blueprint -> connect GitHub repo
 services:
   - type: web
-    name: drxmail-agents
+    name: drxmail-node
     runtime: python
     plan: free
-    region: frankfurt
-    branch: main
     buildCommand: pip install -r requirements.txt
-    startCommand: uvicorn drxmail.api.backend:app --host 0.0.0.0 --port $PORT
+    startCommand: python -m drxmail.agents.fedinode
     envVars:
-      - key: PYTHON_VERSION
-        value: "3.11"
       - key: PORT
-        value: "10000"
+        sync: false
+      - key: FEDIMAIL_BASE
+        # CHANGE THIS after deploy to your public URL, e.g. https://drxmail-node.onrender.com
+        sync: false
+        value: https://drxmail-node.onrender.com
+      - key: FEDIMAIL_DIR
+        sync: false
+        value: /tmp/fedimail

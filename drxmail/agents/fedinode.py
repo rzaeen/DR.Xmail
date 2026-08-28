@@ -1,32 +1,38 @@
 """
-DR.Xmail — Federated Node (local inbox server, decentralized)
-=============================================================
+DR.Xmail — Federated Node (decentralized inbox server)
+========================================================
 A minimal HTTP node that lets agents receive ActivityPub Notes from
-other agents/nodes. Runs locally (or on any host). No central server.
+other agents/nodes. Runs locally OR on any public host (Render, Railway,
+a VPS...). No central server.
 
 Endpoints (per agent):
-  GET  /agents/<id>           -> actor document
+  GET  /.well-known/webfinger?resource=acct:<id>@<host>  -> webfinger (Fediverse discovery)
+  GET  /agents/<id>           -> actor document (with public key)
+  GET  /agents/<id>/publickey -> raw public key (PEM)
   POST /agents/<id>/inbox     -> receive a Note (the "email")
   GET  /agents/<id>/outbox    -> list sent (optional)
   GET  /agents/<id>/messages  -> list received messages (for UI)
 
 Messages are stored in:
-  E:\\ArabianFox\\agents_mail\\fedimail\\<id>\\inbox.jsonl
+  <BASE>/<id>/inbox.jsonl   (BASE from FEDIMAIL_DIR env, default ./fedimail)
 """
 
 from __future__ import annotations
 
 import os
+import sys
 import json
 import uuid
-from typing import Dict, Any
+import base64
+from typing import Dict, Any, Optional
 
 from http.server import BaseHTTPRequestHandler, HTTPServer
-from urllib.parse import urlparse
+from urllib.parse import urlparse, parse_qs
 
 from . import fedimail as fm
+from . import signing
 
-BASE = r"E:\ArabianFox\agents_mail\fedimail"
+BASE = os.environ.get("FEDIMAIL_DIR", os.path.join(os.getcwd(), "fedimail"))
 
 
 def _store_dir(agent_id: str) -> str:
@@ -37,6 +43,25 @@ def _store_dir(agent_id: str) -> str:
 
 def _inbox_path(agent_id: str) -> str:
     return os.path.join(_store_dir(agent_id), "inbox.jsonl")
+
+
+def _key_path(agent_id: str) -> str:
+    return os.path.join(_store_dir(agent_id), "key.pem")
+
+
+def ensure_keypair(agent_id: str) -> Dict[str, str]:
+    """Create (or load) an RSA keypair for an agent so it can be discovered
+    and verified by external Fediverse nodes."""
+    p = _key_path(agent_id)
+    if os.path.exists(p):
+        with open(p, encoding="utf-8") as f:
+            priv = f.read()
+        pub = signing.private_to_public(priv)
+        return {"private": priv, "public": pub}
+    kp = signing.generate_keypair()
+    with open(p, "w", encoding="utf-8") as f:
+        f.write(kp["private"])
+    return kp
 
 
 def save_message(agent_id: str, msg: Dict[str, Any]) -> None:
@@ -57,29 +82,71 @@ def load_messages(agent_id: str) -> list:
     return out
 
 
+def _node_base() -> str:
+    """Public base URL of this node (used in actor ids)."""
+    return os.environ.get("FEDIMAIL_BASE", "").rstrip("/")
+
+
 class Handler(BaseHTTPRequestHandler):
-    def _send(self, code: int, obj: Dict[str, Any]):
-        body = json.dumps(obj).encode("utf-8")
+    def _send(self, code: int, obj: Any, ctype: str = "application/activity+json"):
+        if isinstance(obj, (dict, list)):
+            body = json.dumps(obj, ensure_ascii=False).encode("utf-8")
+        else:
+            body = str(obj).encode("utf-8")
         self.send_response(code)
-        self.send_header("Content-Type", "application/activity+json")
+        self.send_header("Content-Type", ctype)
         self.send_header("Content-Length", str(len(body)))
         self.end_headers()
         self.wfile.write(body)
 
+    def _host(self) -> str:
+        return self.headers.get("Host", "localhost")
+
+    def _base(self) -> str:
+        cfg = _node_base()
+        if cfg:
+            return cfg
+        return f"http://{self._host()}"
+
     def do_GET(self):
         parts = urlparse(self.path)
         segs = [s for s in parts.path.split("/") if s]
-        # /agents/<id> or /agents/<id>/messages
+        base = self._base()
+
+        # WebFinger discovery (so external agents can resolve @id@host)
+        if segs and segs[0] == ".well-known" and "webfinger" in segs:
+            q = parse_qs(parts.query)
+            res = q.get("resource", [""])[0]
+            if res.startswith("acct:"):
+                handle = res[len("acct:"):]
+                aid = handle.split("@")[0]
+                actor_id = fm.make_actor_id(aid, base)
+                self._send(200, {
+                    "subject": res,
+                    "links": [{
+                        "rel": "self",
+                        "type": "application/activity+json",
+                        "href": actor_id,
+                    }],
+                }, ctype="application/json")
+                return
+
         if len(segs) >= 2 and segs[0] == "agents":
             aid = segs[1]
             if len(segs) == 2:
+                kp = ensure_keypair(aid)
                 self._send(200, fm.actor_doc(
-                    fm.make_actor_id(aid, f"http://{self.headers.get('Host','localhost')}"),
-                    f"http://{self.headers.get('Host','localhost')}/agents/{aid}/inbox",
-                    aid))
+                    fm.make_actor_id(aid, base),
+                    f"{base}/agents/{aid}/inbox",
+                    aid, public_key_pem=kp["public"]))
+                return
+            if segs[2] == "publickey":
+                kp = ensure_keypair(aid)
+                self._send(200, kp["public"], ctype="application/pem-key")
                 return
             if segs[2] == "messages":
-                self._send(200, {"messages": load_messages(aid)})
+                self._send(200, {"agent": aid, "messages": load_messages(aid)},
+                           ctype="application/json")
                 return
         self._send(404, {"error": "not found"})
 
@@ -107,7 +174,8 @@ class Handler(BaseHTTPRequestHandler):
 
 
 def run_node(host: str = "0.0.0.0", port: int = 8000):
-    """Run the federated node (blocking)."""
+    """Run the federated node (blocking). PORT from env on Render."""
+    port = int(os.environ.get("PORT", port))
     print(f"[fedinode] listening on http://{host}:{port}")
     HTTPServer((host, port), Handler).serve_forever()
 

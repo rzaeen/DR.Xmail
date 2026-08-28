@@ -39,6 +39,13 @@ def generate_keypair() -> Dict[str, str]:
     return {"private": priv_pem, "public": pub_pem}
 
 
+def private_to_public(pem: str) -> str:
+    """Return the public-key PEM for a given private-key PEM."""
+    key = load_pem_private_key(pem.encode(), password=None)
+    return key.public_key().public_bytes(
+        Encoding.PEM, PublicFormat.SubjectPublicKeyInfo).decode()
+
+
 def _b64(data: bytes) -> str:
     return base64.b64encode(data).decode()
 
