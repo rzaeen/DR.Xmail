@@ -75,3 +75,4 @@ send_to_external('http://your-node/agents/you', '@user@mastodon.social',
 
 ## 📄 الترخيص
 MIT — ArabianFox / DR.Xmail
+
